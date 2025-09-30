@@ -1,0 +1,131 @@
+# —— 解释性注释可按需删除 ——
+
+# Python 字节码 / 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C 扩展
+*.so
+
+# 发行/打包
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+wheels/
+share/python-wheels/
+*.egg-info/
+*.egg
+MANIFEST
+
+# PyInstaller
+*.spec
+*.manifest
+
+# 安装器日志
+pip-log.txt
+pip-delete-this-directory.txt
+
+# 测试 / 覆盖率
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+*.cover
+*.py,cover
+.cache
+cover/
+
+# 文档
+docs/_build/
+doc/_build/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+static/
+media/
+
+# Flask
+instance/
+.webassets-cache
+
+# Scrapy
+.scrapy/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+*.ipynb
+.profile_default/
+ipython_config.py
+
+# 依赖/环境管理
+# pyenv
+.python-version
+
+# pipenv / poetry / pdm（如需提交锁文件，删掉相应行）
+Pipfile.lock
+poetry.lock
+pdm.lock
+
+# PEP 582 / __pypackages__
+__pypackages__/
+
+# 虚拟环境
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# 类型检查
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Cython 调试符号
+cython_debug/
+
+# 编辑器/IDE
+.vscode/
+.idea/
+
+# 操作系统杂项
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# dotenv 与本地配置
+*.env
+.env.*
+
+# 日志
+logs/
+*.log
+
+# 构建站点（如 mkdocs）
+/site
+
+# dir
+/checkpoints
+/logs
+/results
+/datasets_processed

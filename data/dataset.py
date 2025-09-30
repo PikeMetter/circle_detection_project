@@ -13,7 +13,7 @@ class CircleDataset(Dataset):
             current_file_dir = os.path.dirname(os.path.abspath(__file__))
             # 向上一级到project目录，再进入datasets
             project_dir = os.path.dirname(current_file_dir)
-            data_dir = os.path.join(project_dir, 'datasets')
+            data_dir = os.path.join(project_dir, 'datasets_processed')
         
         self.data_dir = data_dir
         self.images_dir = os.path.join(data_dir, 'oriData')
