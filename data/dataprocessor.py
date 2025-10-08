@@ -77,7 +77,7 @@ class DataProcessor:
             
             A.Compose([
                 A.RandomScale(scale_limit=0.2, p=0.8),
-                A.RandomResizedCrop(size=(512, 512), scale=(0.8, 1.0), p=0.8),
+                A.RandomResizedCrop(height=512, width=512, scale=(0.8, 1.0), p=0.8),
             ], keypoint_params=A.KeypointParams(format='xy')),
             
             # 亮度对比度变换
