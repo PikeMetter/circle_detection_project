@@ -16,7 +16,7 @@ class CircleDataset(Dataset):
             data_dir = os.path.join(project_dir, 'datasets_processed')
         
         self.data_dir = data_dir
-        self.images_dir = os.path.join(data_dir, 'oriData')
+        self.images_dir = os.path.join(data_dir, 'images')
         self.annotations_dir = os.path.join(data_dir, 'annotations')  # 注意是annotations
         self.transform = transform
         self.heatmap_sigma = heatmap_sigma

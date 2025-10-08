@@ -5,10 +5,11 @@ import torch
 import argparse
 from PIL import Image
 import matplotlib.pyplot as plt
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 from config import Config
 from models import UNetForCircleCenter
-from data import get_transforms
 from utils import visualize_predictions, setup_logger
 from torch.cuda.amp import autocast
 
@@ -21,10 +22,20 @@ class CirclePredictor:
         self.model = UNetForCircleCenter(Config.INPUT_CHANNELS, Config.OUTPUT_CHANNELS)
         self.load_model(model_path)
         
-        # 数据变换
-        self.transform = get_transforms('test', Config.IMAGE_SIZE)
+        # 数据变换 - 专门为预测创建，不包含关键点参数
+        self.transform = self._get_predict_transforms(Config.IMAGE_SIZE)
         
         self.logger.info(f"Predictor initialized on {self.device}")
+    
+    def _get_predict_transforms(self, image_size):
+        """获取用于预测的数据增强变换（不包含关键点）"""
+        transforms = A.Compose([
+            A.Resize(height=image_size[0], width=image_size[1]),
+            A.Normalize(mean=[0.485, 0.456, 0.406], 
+                       std=[0.229, 0.224, 0.225]),
+            ToTensorV2()
+        ])
+        return transforms
     
     def load_model(self, model_path):
         """加载训练好的模型"""

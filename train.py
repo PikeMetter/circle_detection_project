@@ -285,6 +285,9 @@ def main():
             is_best_loss = val_loss < best_val_loss
             is_best_error = val_metrics['mean_error'] < best_mean_error
             
+            # 创建可pickle的配置字典
+            config_dict = {k: v for k, v in Config.__dict__.items() if not k.startswith('__') and not callable(v)}
+            
             if is_best_loss:
                 best_val_loss = val_loss
                 torch.save({
@@ -294,7 +297,7 @@ def main():
                     'scheduler_state_dict': scheduler.state_dict(),
                     'val_loss': val_loss,
                     'val_metrics': val_metrics,
-                    'config': Config.__dict__
+                    'config': config_dict
                 }, os.path.join(Config.CHECKPOINT_DIR, 'best_loss_model.pth'))
                 logger.info(f'Best loss model saved at epoch {epoch} (loss: {val_loss:.4f})')
             
@@ -307,7 +310,7 @@ def main():
                     'scheduler_state_dict': scheduler.state_dict(),
                     'val_loss': val_loss,
                     'val_metrics': val_metrics,
-                    'config': Config.__dict__
+                    'config': config_dict
                 }, os.path.join(Config.CHECKPOINT_DIR, 'best_accuracy_model.pth'))
                 logger.info(f'Best accuracy model saved at epoch {epoch} (error: {best_mean_error:.2f}px)')
             
@@ -321,7 +324,7 @@ def main():
                 'val_metrics': val_metrics,
                 'best_val_loss': best_val_loss,
                 'best_mean_error': best_mean_error,
-                'config': Config.__dict__
+                'config': config_dict
             }, os.path.join(Config.CHECKPOINT_DIR, 'last_checkpoint.pth'))
             
             # 定期保存检查点
