@@ -6,23 +6,35 @@ class Config:
     VAL_DATA_DIR = "datasets_processed/val"
     TEST_DATA_DIR = "datasets_processed/test"
     
-    # 模型参数
+    # 模型选择
+    MODEL_TYPE = "yolo_v1"  # 可选值: unet_circle, unet_segmentation, yolo_v1
+    
+    # 模型通用参数
     INPUT_CHANNELS = 3
     OUTPUT_CHANNELS = 1
-    IMAGE_SIZE = (512, 512)
+    IMAGE_SIZE = (448, 448)  # YOLOv1标准输入尺寸为448x448
     
     # 训练参数
     BATCH_SIZE = 8
-    LEARNING_RATE = 0.0001 #学习率,默认值为0.001
+    LEARNING_RATE = 0.001  # 学习率,默认值为0.001
     NUM_EPOCHS = 100
     DEVICE = "cuda"
     
-    # 损失函数权重
-    HEATMAP_WEIGHT = 2.0 #1.0,现在增加了热力图损失权重
-    COORD_WEIGHT = 5.0 #10.0,现在增加了坐标损失权重
+    # UNet相关参数
+    HEATMAP_WEIGHT = 2.0  # 热力图损失权重
+    COORD_WEIGHT = 5.0    # 坐标损失权重
+    HEATMAP_SIGMA = 10    # 热力图参数
     
-    # 热力图参数
-    HEATMAP_SIGMA = 10
+    # YOLOv1相关参数
+    YOLO_S = 7        # 网格大小
+    YOLO_B = 2        # 每个网格预测的边界框数量
+    YOLO_C = 1        # 类别数量
+    YOLO_CONF_THRESHOLD = 0.5  # 置信度阈值
+    YOLO_NMS_THRESHOLD = 0.4   # 非极大值抑制阈值
+    YOLO_LAMBDA_COORD = 5.0    # 坐标损失权重
+    YOLO_LAMBDA_NOOBJ = 0.5    # 无物体损失权重
+    YOLO_CONF_THRESHOLD = 0.5  # 置信度阈值
+    YOLO_NMS_THRESHOLD = 0.5   # 非极大值抑制阈值
     
     # 保存路径
     CHECKPOINT_DIR = "checkpoints"
