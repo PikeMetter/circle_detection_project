@@ -8,7 +8,9 @@ import json
 
 from config import Config
 from data import CircleDataset, YOLODataset, get_transforms
-from models import UNetForCircleCenter, ModelFactory
+from models import ModelFactory
+from models.unet.unet import UNetForCircleCenter
+from models.yolo.yolo import YOLOv1
 from utils import calculate_metrics, visualize_predictions, setup_logger, compute_metrics
 from torch.cuda.amp import autocast
 

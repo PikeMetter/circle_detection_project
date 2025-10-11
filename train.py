@@ -9,7 +9,11 @@ import gc
 
 from config import Config
 from data import CircleDataset, YOLODataset, get_transforms
-from models import UNetForCircleCenter, CombinedLoss, ModelFactory, YOLOv1Loss
+from models import ModelFactory
+from models.unet.unet import UNetForCircleCenter
+from models.yolo.yolo import YOLOv1
+from models.unet.losses import CombinedLoss
+from models.yolo.losses import YOLOv1Loss
 from utils import calculate_metrics, setup_logger
 
 def train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, epoch, logger, model_type):
