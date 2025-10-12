@@ -21,6 +21,12 @@ def visualize_predictions(image, pred_heatmap, pred_coords, true_coords,
     
     h, w = image.shape[:2]
     
+    # 确保坐标是一维数组
+    if hasattr(pred_coords, 'ndim') and pred_coords.ndim > 1:
+        pred_coords = pred_coords.flatten()
+    if hasattr(true_coords, 'ndim') and true_coords.ndim > 1:
+        true_coords = true_coords.flatten()
+    
     # 反标准化坐标
     pred_x = int(pred_coords[0] * w)
     pred_y = int(pred_coords[1] * h)

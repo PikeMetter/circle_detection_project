@@ -11,7 +11,10 @@ from config import Config
 from data import CircleDataset, YOLODataset, get_transforms
 from models import ModelFactory
 from models.unet.unet import UNetForCircleCenter
-from models.yolo.yolo import YOLOv1
+from models.yolo.yolov1 import YOLOv1
+from models.yolo.yolov3 import YOLOv3
+from models.yolo.yolov5 import YOLOv5
+from models.yolo.yolov8 import YOLOv8
 from models.unet.losses import CombinedLoss
 from models.yolo.losses import YOLOv1Loss
 from utils import calculate_metrics, setup_logger
@@ -21,7 +24,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, e
     total_loss = 0.0
     
     # 根据模型类型初始化不同的损失变量
-    if model_type == 'yolo_v1':
+    if ModelFactory.is_yolo_model(model_type):
         total_coord_loss = 0.0
         total_conf_loss = 0.0
         total_cls_loss = 0.0
@@ -40,8 +43,8 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, e
         
         # 混合精度训练
         with autocast(enabled=Config.USE_MIXED_PRECISION):
-            if model_type == 'yolo_v1':
-                # YOLOv1模型训练逻辑
+            if ModelFactory.is_yolo_model(model_type):
+                # YOLO模型训练逻辑
                 targets = batch['target'].to(device, non_blocking=True)
                 outputs = model(images)
                 loss_components = criterion(outputs, targets)
@@ -92,20 +95,20 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, e
         # 累计损失
         total_loss += loss.item() * accumulation_steps
         
-        if model_type == 'yolo_v1':
+        if ModelFactory.is_yolo_model(model_type):
             total_coord_loss += coord_loss.item() * accumulation_steps
             total_conf_loss += conf_loss.item() * accumulation_steps
             total_cls_loss += cls_loss.item() * accumulation_steps
         else:
-            total_hm_loss += hm_loss.item()
-            total_coord_loss += coord_loss.item()
+            total_hm_loss += hm_loss.item() * accumulation_steps
+            total_coord_loss += coord_loss.item() * accumulation_steps
         
         # 清理显存
         if batch_idx % 10 == 0:
             torch.cuda.empty_cache()
         
         # 更新进度条
-        if model_type == 'yolo_v1':
+        if ModelFactory.is_yolo_model(model_type):
             pbar.set_postfix({
                 'Loss': f'{total_loss/(batch_idx+1):.4f}',
                 'Coord': f'{total_coord_loss/(batch_idx+1):.4f}',
@@ -132,7 +135,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, e
     
     avg_loss = total_loss / len(train_loader)
     
-    if model_type == 'yolo_v1':
+    if ModelFactory.is_yolo_model(model_type):
         avg_coord_loss = total_coord_loss / len(train_loader)
         avg_conf_loss = total_conf_loss / len(train_loader)
         avg_cls_loss = total_cls_loss / len(train_loader)
@@ -151,7 +154,7 @@ def validate(model, val_loader, criterion, device, epoch, logger, model_type):
     total_loss = 0.0
     
     # 根据模型类型初始化不同的损失变量和指标容器
-    if model_type == 'yolo_v1':
+    if ModelFactory.is_yolo_model(model_type):
         total_coord_loss = 0.0
         total_conf_loss = 0.0
         total_cls_loss = 0.0
@@ -168,8 +171,8 @@ def validate(model, val_loader, criterion, device, epoch, logger, model_type):
             
             # 混合精度推理
             with autocast(enabled=Config.USE_MIXED_PRECISION):
-                if model_type == 'yolo_v1':
-                    # YOLOv1模型验证逻辑
+                if ModelFactory.is_yolo_model(model_type):
+                    # YOLO模型验证逻辑
                     targets = batch['target'].to(device, non_blocking=True)
                     outputs = model(images)
                     loss_components = criterion(outputs, targets)
@@ -200,7 +203,7 @@ def validate(model, val_loader, criterion, device, epoch, logger, model_type):
             
             total_loss += loss.item()
             
-            if model_type == 'yolo_v1':
+            if ModelFactory.is_yolo_model(model_type):
                 total_coord_loss += coord_loss.item()
                 total_conf_loss += conf_loss.item()
                 total_cls_loss += cls_loss.item()
@@ -211,7 +214,7 @@ def validate(model, val_loader, criterion, device, epoch, logger, model_type):
                 all_true_coords.append(coords.cpu())
             
             # 更新进度条
-            if model_type == 'yolo_v1':
+            if ModelFactory.is_yolo_model(model_type):
                 pbar.set_postfix({
                     'loss': f'{total_loss/(batch_idx+1):.4f}',
                     'coord_loss': f'{total_coord_loss/(batch_idx+1):.4f}',
@@ -227,12 +230,12 @@ def validate(model, val_loader, criterion, device, epoch, logger, model_type):
         
     avg_loss = total_loss / len(val_loader)
     
-    if model_type == 'yolo_v1':
+    if ModelFactory.is_yolo_model(model_type):
         avg_coord_loss = total_coord_loss / len(val_loader)
         avg_conf_loss = total_conf_loss / len(val_loader)
         avg_cls_loss = total_cls_loss / len(val_loader)
         
-        # 对于YOLOv1，添加专门的评估指标计算
+        # 对于YOLO模型，添加专门的评估指标计算
         metrics = {'mean_error': 0.0, 'std_error': 0.0, 'acc@1px': 0.0, 'acc@2px': 0.0, 'acc@5px': 0.0}
         
         logger.info(f"Val Epoch {epoch}: Loss={avg_loss:.4f}, Coord={avg_coord_loss:.4f}, Conf={avg_conf_loss:.4f}, Class={avg_cls_loss:.4f}")
@@ -279,17 +282,15 @@ def main():
     val_transform = get_transforms('val', Config.IMAGE_SIZE)
     
     try:
-        if model_type == 'yolo_v1':
+        if ModelFactory.is_yolo_model(model_type):
             train_dataset = YOLODataset(
                 Config.TRAIN_DATA_DIR,
-                transform=train_transform,
-                phase='train'
+                transform=train_transform
             )
             
             val_dataset = YOLODataset(
                 Config.VAL_DATA_DIR,
-                transform=val_transform,
-                phase='val'
+                transform=val_transform
             )
         else:
             train_dataset = CircleDataset(
@@ -332,32 +333,8 @@ def main():
     logger.info(f'Train batches: {len(train_loader)}, Val batches: {len(val_loader)}')
     
     # 使用ModelFactory创建模型
-    if model_type == 'yolo_v1':
-        model = ModelFactory.create_model(
-            'yolo_v1',
-            in_channels=Config.INPUT_CHANNELS,
-            num_classes=Config.YOLO_C,
-            S=Config.YOLO_S,
-            B=Config.YOLO_B
-        )
-        # 创建YOLOv1损失函数
-        criterion = ModelFactory.create_loss('yolo_v1')
-    elif model_type == 'unet_segmentation':
-        model = ModelFactory.create_model(
-            'unet_segmentation',
-            in_channels=Config.INPUT_CHANNELS,
-            out_channels=Config.OUTPUT_CHANNELS
-        )
-        # 创建UNet分割损失函数
-        criterion = ModelFactory.create_loss('unet_segmentation')
-    else:
-        model = ModelFactory.create_model(
-            'unet_circle',
-            in_channels=Config.INPUT_CHANNELS,
-            out_channels=Config.OUTPUT_CHANNELS
-        )
-        # 创建UNet圆形检测损失函数
-        criterion = ModelFactory.create_loss('unet_circle')
+    model = ModelFactory.create_model(model_type, config=ModelFactory.get_config(model_type))
+    criterion = ModelFactory.create_loss(model_type)
     
     model = model.to(device)
     criterion = criterion.to(device)
@@ -371,23 +348,23 @@ def main():
     model_memory = total_params * 4 / 1024**3  # 4 bytes per parameter (float32)
     logger.info(f'Estimated model memory: {model_memory:.2f}GB')
     
-    # 优化器
-    optimizer = optim.AdamW(
-        model.parameters(), 
-        lr=Config.LEARNING_RATE, 
-        weight_decay=1e-4,
-        eps=1e-8
-    )
+    # 根据模型类型选择优化器和学习率调度器
+    model_config = ModelFactory.get_config(model_type)
     
-    # 学习率调度器
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, 
-        T_max=Config.NUM_EPOCHS,
-        eta_min=1e-6
-    )
+    if ModelFactory.is_yolo_model(model_type):
+        if model_type == 'yolo_v1':
+            optimizer = optim.SGD(model.parameters(), lr=model_config.learning_rate, momentum=0.9, weight_decay=5e-4)
+        else:
+            optimizer = optim.Adam(model.parameters(), lr=model_config.learning_rate)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=model_config.lr_step_size, gamma=model_config.lr_gamma)
+    elif ModelFactory.is_unet_model(model_type):
+        optimizer = optim.Adam(model.parameters(), lr=model_config.learning_rate)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=model_config.lr_step_size, gamma=model_config.lr_gamma)
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
     
     # 混合精度训练
-    scaler = GradScaler() if Config.USE_MIXED_PRECISION else None
+    scaler = GradScaler() if Config.USE_MIXED_PRECISION and ModelFactory.is_yolo_model(model_type) else None
     if Config.USE_MIXED_PRECISION:
         logger.info("Using mixed precision training")
     
@@ -401,7 +378,20 @@ def main():
     
     # 检查是否有预训练模型
     checkpoint_path = os.path.join(Config.CHECKPOINT_DIR, 'last_checkpoint.pth')
-    if os.path.exists(checkpoint_path):
+    
+    # 根据模型类型确定预训练权重路径
+    pretrained_paths = {
+        'yolo_v8': "yolov8s.pt",
+        'yolo_v5': "yolov5s.pt",
+        'yolo_v3': "yolov3.pt",
+        'yolo_v1': "yolov1.pt"
+    }
+    
+    # 用户可选择的预训练模型选项
+    use_pretrained = getattr(Config, 'USE_PRETRAINED', False)  # 是否使用预训练模型
+    pretrained_choice = getattr(Config, 'PRETRAINED_MODEL', 'custom')  # 'custom' 或 'yolo'
+    
+    if os.path.exists(checkpoint_path) and pretrained_choice != 'yolo':
         logger.info(f"Loading checkpoint from {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -411,6 +401,27 @@ def main():
         start_epoch = checkpoint['epoch'] + 1
         best_val_loss = checkpoint.get('best_val_loss', float('inf'))
         logger.info(f"Resumed training from epoch {start_epoch}")
+    elif use_pretrained and ModelFactory.is_yolo_model(model_type) and pretrained_choice == 'yolo':
+        pretrained_path = pretrained_paths.get(model_type, "")
+        if os.path.exists(pretrained_path):
+            logger.info(f"Loading pretrained weights from {pretrained_path}")
+            pretrained_dict = torch.load(pretrained_path, map_location=device)
+            
+            # 获取当前模型的state_dict
+            model_dict = model.state_dict()
+            
+            # 过滤出在当前模型中存在的权重
+            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+            
+            # 更新当前模型的state_dict
+            model_dict.update(pretrained_dict)
+            
+            # 加载更新后的state_dict
+            model.load_state_dict(model_dict)
+            
+            logger.info(f"Loaded pretrained weights for {len(pretrained_dict)} layers")
+        else:
+            logger.warning(f"Pretrained model {pretrained_path} not found, training from scratch")
     
     logger.info("Starting training...")
     logger.info(f"Configuration: Batch Size={Config.BATCH_SIZE}, Image Size={Config.IMAGE_SIZE}")
@@ -419,7 +430,7 @@ def main():
     try:
         for epoch in range(start_epoch, Config.NUM_EPOCHS + 1):
             # 训练一个epoch
-            if model_type == 'yolo_v1':
+            if ModelFactory.is_yolo_model(model_type):
                 train_loss, train_coord_loss, train_conf_loss, train_cls_loss = train_one_epoch(
                     model, train_loader, criterion, optimizer, scaler,
                     device, epoch, logger, model_type
@@ -431,7 +442,7 @@ def main():
                 )
             
             # 验证
-            if model_type == 'yolo_v1':
+            if ModelFactory.is_yolo_model(model_type):
                 val_loss, val_coord_loss, val_conf_loss, val_cls_loss, metrics = validate(
                     model, val_loader, criterion, device, epoch, logger, model_type
                 )
@@ -448,7 +459,7 @@ def main():
             writer.add_scalar('Loss/train', train_loss, epoch)
             writer.add_scalar('Loss/val', val_loss, epoch)
             
-            if model_type == 'yolo_v1':
+            if ModelFactory.is_yolo_model(model_type):
                 writer.add_scalar('Loss/train_coord', train_coord_loss, epoch)
                 writer.add_scalar('Loss/val_coord', val_coord_loss, epoch)
                 writer.add_scalar('Loss/train_conf', train_conf_loss, epoch)
@@ -489,7 +500,7 @@ def main():
             }
             
             # 添加特定模型类型的损失值
-            if model_type == 'yolo_v1':
+            if ModelFactory.is_yolo_model(model_type):
                 checkpoint.update({
                     'val_coord_loss': val_coord_loss,
                     'val_conf_loss': val_conf_loss,
@@ -514,7 +525,7 @@ def main():
                 logger.info(f'Best loss model saved at epoch {epoch} (loss: {val_loss:.4f})')
             
             # 保存最佳精度模型（仅UNet）
-            if model_type != 'yolo_v1' and is_best_error:
+            if not ModelFactory.is_yolo_model(model_type) and is_best_error:
                 torch.save(checkpoint, os.path.join(Config.CHECKPOINT_DIR, 'best_accuracy_model.pth'))
                 logger.info(f'Best accuracy model saved at epoch {epoch} (error: {best_mean_error:.2f}px)')
             
@@ -534,7 +545,7 @@ def main():
             torch.cuda.reset_peak_memory_stats()
             
             # 打印验证结果
-            if model_type == 'yolo_v1':
+            if ModelFactory.is_yolo_model(model_type):
                 logger.info(f'Val Epoch {epoch}: Loss={val_loss:.4f}, Coord={val_coord_loss:.4f}, Conf={val_conf_loss:.4f}, Cls={val_cls_loss:.4f}')
             else:
                 logger.info(f'Val Epoch {epoch}: Loss={val_loss:.4f}, HM={val_hm_loss:.4f}, Coord={val_coord_loss:.4f}')
@@ -551,7 +562,7 @@ def main():
         writer.close()
         logger.info("Training completed!")
         logger.info(f"Best validation loss: {best_val_loss:.4f}")
-        if model_type != 'yolo_v1':
+        if not ModelFactory.is_yolo_model(model_type):
             logger.info(f"Best mean error: {best_mean_error:.2f}px")
 
 if __name__ == '__main__':

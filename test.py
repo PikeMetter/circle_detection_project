@@ -10,7 +10,10 @@ from config import Config
 from data import CircleDataset, YOLODataset, get_transforms
 from models import ModelFactory
 from models.unet.unet import UNetForCircleCenter
-from models.yolo.yolo import YOLOv1
+from models.yolo.yolov1 import YOLOv1
+from models.yolo.yolov3 import YOLOv3
+from models.yolo.yolov5 import YOLOv5
+from models.yolo.yolov8 import YOLOv8
 from utils import calculate_metrics, visualize_predictions, setup_logger, compute_metrics
 from torch.cuda.amp import autocast
 
@@ -29,7 +32,7 @@ def test_model(model_path, test_data_dir, save_results=True, visualize=True, mod
     logger.info(f'Testing with {model_type} model')
     
     # 根据模型类型选择数据集
-    if model_type == 'yolo_v1':
+    if ModelFactory.is_yolo_model(model_type):
         test_transform = get_transforms('test', Config.IMAGE_SIZE)
         test_dataset = YOLODataset(
             test_data_dir,
@@ -56,33 +59,27 @@ def test_model(model_path, test_data_dir, save_results=True, visualize=True, mod
     logger.info(f'Test samples: {len(test_dataset)}')
     
     # 使用ModelFactory创建模型
-    if model_type == 'yolo_v1':
-        model = ModelFactory.create_model(
-            'yolo_v1',
-            in_channels=Config.INPUT_CHANNELS,
-            num_classes=Config.YOLO_C,
-            S=Config.YOLO_S,
-            B=Config.YOLO_B
-        )
-    elif model_type == 'unet_segmentation':
-        model = ModelFactory.create_model(
-            'unet_segmentation',
-            in_channels=Config.INPUT_CHANNELS,
-            out_channels=Config.OUTPUT_CHANNELS
-        )
-    else:
-        model = ModelFactory.create_model(
-            'unet_circle',
-            in_channels=Config.INPUT_CHANNELS,
-            out_channels=Config.OUTPUT_CHANNELS
-        )
+    model = ModelFactory.create_model(model_type, config=ModelFactory.get_config(model_type))
     
     if os.path.exists(model_path):
-        checkpoint = torch.load(model_path, map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        logger.info(f'Loaded model from {model_path}')
-        if 'val_metrics' in checkpoint:
-            logger.info(f'Model validation metrics: {checkpoint["val_metrics"]}')
+        try:
+            checkpoint = torch.load(model_path, map_location=device)
+            # 先尝试严格加载
+            model.load_state_dict(checkpoint['model_state_dict'], strict=True)
+            logger.info(f'Loaded model from {model_path} (strict load)')
+            if 'val_metrics' in checkpoint:
+                logger.info(f'Model validation metrics: {checkpoint["val_metrics"]}')
+        except Exception as e:
+            logger.warning(f'Strict load failed: {str(e)}')
+            try:
+                # 如果严格加载失败，尝试非严格加载
+                model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+                logger.info(f'Loaded model from {model_path} (non-strict load)')
+                if 'val_metrics' in checkpoint:
+                    logger.info(f'Model validation metrics: {checkpoint["val_metrics"]}')
+            except Exception as e2:
+                logger.error(f'Error loading model from {model_path}: {str(e2)}')
+                logger.info('Initializing model with random weights')
     else:
         logger.error(f'Model file not found: {model_path}')
         return
@@ -109,8 +106,8 @@ def test_model(model_path, test_data_dir, save_results=True, visualize=True, mod
             
             # 混合精度推理
             with autocast(enabled=Config.USE_MIXED_PRECISION):
-                if model_type == 'yolo_v1':
-                    # YOLOv1模型处理
+                if ModelFactory.is_yolo_model(model_type):
+                    # YOLO模型处理
                     if 'target' in batch:
                         targets = batch['target'].to(device, non_blocking=True)
                     
@@ -293,7 +290,7 @@ def test_model(model_path, test_data_dir, save_results=True, visualize=True, mod
     logger.info(f"Accuracy @ 10px: {metrics['acc@10px']:.1%}")
     logger.info(f"Accuracy @ 20px: {metrics['acc@20px']:.1%}")
     
-    if model_type == 'yolo_v1' and results:
+    if ModelFactory.is_yolo_model(model_type) and results:
         # 计算YOLO特有指标
         confidences = [r['confidence'] for r in results]
         mean_confidence = np.mean(confidences)
@@ -348,7 +345,7 @@ def test_model(model_path, test_data_dir, save_results=True, visualize=True, mod
 
 def main():
     # 测试最佳模型
-    best_model_path = os.path.join(Config.CHECKPOINT_DIR, 'best_accuracy_model.pth')
+    best_model_path = os.path.join(Config.CHECKPOINT_DIR, 'yolov8s.pt')
     
     if not os.path.exists(best_model_path):
         print(f"Model not found: {best_model_path}")

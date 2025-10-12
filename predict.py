@@ -33,26 +33,7 @@ class CirclePredictor:
     
     def _create_model(self):
         """使用ModelFactory创建模型"""
-        if self.model_type == 'yolo_v1':
-            model = ModelFactory.create_model(
-                'yolo_v1',
-                in_channels=Config.INPUT_CHANNELS,
-                num_classes=Config.YOLO_C,
-                S=Config.YOLO_S,
-                B=Config.YOLO_B
-            )
-        elif self.model_type == 'unet_segmentation':
-            model = ModelFactory.create_model(
-                'unet_segmentation',
-                in_channels=Config.INPUT_CHANNELS,
-                out_channels=Config.OUTPUT_CHANNELS
-            )
-        else:
-            model = ModelFactory.create_model(
-                'unet_circle',
-                in_channels=Config.INPUT_CHANNELS,
-                out_channels=Config.OUTPUT_CHANNELS
-            )
+        model = ModelFactory.create_model(self.model_type, config=ModelFactory.get_config(self.model_type))
         return model
     
     def _get_predict_transforms(self, image_size):
@@ -121,7 +102,7 @@ class CirclePredictor:
         with torch.no_grad():
             # 混合精度推理
             with autocast(enabled=Config.USE_MIXED_PRECISION):
-                if self.model_type == 'yolo_v1':
+                if ModelFactory.is_yolo_model(self.model_type):
                     outputs = self.model(image_tensor)
                     # 使用模型的detect方法提取检测结果
                     detections = self.model.detect(
@@ -229,8 +210,8 @@ class CirclePredictor:
             
             with torch.no_grad():
                 with autocast(enabled=Config.USE_MIXED_PRECISION):
-                    if self.model_type == 'yolo_v1':
-                        # YOLOv1批量预测
+                    if ModelFactory.is_yolo_model(self.model_type):
+                        # YOLO系列批量预测
                         outputs = self.model(batch_tensor)
                         detections = self.model.detect(
                             outputs,
@@ -327,8 +308,8 @@ class CirclePredictor:
         center_x, center_y = result['center_x'], result['center_y']
         
         # 创建图形
-        if self.model_type == 'yolo_v1':
-            # YOLOv1可视化
+        if ModelFactory.is_yolo_model(self.model_type):
+            # YOLO系列可视化
             fig, ax = plt.subplots(1, 1, figsize=(10, 10))
             ax.imshow(image)
             ax.plot(center_x, center_y, 'ro', markersize=12, 
@@ -347,7 +328,7 @@ class CirclePredictor:
                                   edgecolor='green', facecolor='none', linewidth=2, linestyle='--')
                 ax.add_patch(circle)
                 
-            ax.set_title(f'Circle Detection (YOLOv1)\nConfidence: {result.get("confidence", 0.0):.3f}')
+            ax.set_title(f'Circle Detection ({self.model_type.upper()})\nConfidence: {result.get("confidence", 0.0):.3f}')
             ax.legend()
             ax.axis('off')
         else:
@@ -483,7 +464,7 @@ def main():
     parser.add_argument('--batch_size', type=int, default=4,
                        help='Batch size for batch prediction')
     parser.add_argument('--model_type', type=str, default=None,
-                       help='Model type to use (yolo_v1/unet_circle/unet_segmentation)')
+                       help='Model type to use (yolo_v1/yolo_v3/yolo_v5/yolo_v8/unet_circle/unet_segmentation)')
     
     args = parser.parse_args()
     

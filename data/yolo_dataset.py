@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from config import Config
 
 class YOLODataset(Dataset):
-    """YOLOv1数据集类，用于处理圆形检测任务"""
+    """YOLO数据集类，用于处理圆形检测任务"""
     def __init__(self, data_dir=None, transform=None, S=7, B=2, C=1):
         # 如果没有指定data_dir，自动构建路径
         if data_dir is None:
