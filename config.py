@@ -10,8 +10,8 @@ class Config:
     MODEL_TYPE = "yolo_v8"  # 可选值: unet_circle, unet_segmentation, yolo_v1, yolo_v3, yolo_v5, yolo_v8
     
     # 预训练模型选项
-    USE_PRETRAINED = False  # 是否使用预训练模型
-    PRETRAINED_MODEL = "custom"  # 'custom' 使用检查点模型, 'yolo' 使用YOLO预训练模型
+    USE_PRETRAINED = True  # 是否使用预训练模型
+    PRETRAINED_MODEL = "yolo"  # 'custom' 使用检查点模型, 'yolo' 使用YOLO预训练模型
     
     # 模型通用参数
     INPUT_CHANNELS = 3

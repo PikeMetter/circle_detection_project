@@ -108,8 +108,8 @@ def test_model(model_path, test_data_dir, save_results=True, visualize=True, mod
             with autocast(enabled=Config.USE_MIXED_PRECISION):
                 if ModelFactory.is_yolo_model(model_type):
                     # YOLO模型处理
-                    if 'target' in batch:
-                        targets = batch['target'].to(device, non_blocking=True)
+                    if 'targets' in batch:
+                        targets = batch['targets'].to(device, non_blocking=True)
                     
                     outputs = model(images)
                     
@@ -127,7 +127,7 @@ def test_model(model_path, test_data_dir, save_results=True, visualize=True, mod
                     detection = detections[0]
                     
                     # 从target中提取真实中心点
-                    if 'target' in batch:
+                    if 'targets' in batch:
                         target_grid = targets[0].cpu().numpy()
                         # 寻找包含物体的单元格
                         object_mask = target_grid[..., 4] > 0
@@ -143,7 +143,7 @@ def test_model(model_path, test_data_dir, save_results=True, visualize=True, mod
                             # 如果没有检测到物体，使用默认值
                             gt_x, gt_y = 0.5, 0.5
                     else:
-                        # 如果没有target，使用默认值
+                        # 如果没有targets，使用默认值
                         gt_x, gt_y = 0.5, 0.5
                     
                     # 获取预测中心点

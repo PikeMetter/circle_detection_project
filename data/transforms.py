@@ -16,7 +16,7 @@ def get_transforms(phase='train', image_size=(512, 512)):
             A.Normalize(mean=[0.485, 0.456, 0.406], 
                        std=[0.229, 0.224, 0.225]),
             ToTensorV2()
-        ], keypoint_params=A.KeypointParams(format='xy', remove_invisible=False))
+        ], bbox_params=A.BboxParams(format='coco', label_fields=['class_labels']))
         
     else:  # val or test
         transforms = A.Compose([
@@ -24,6 +24,6 @@ def get_transforms(phase='train', image_size=(512, 512)):
             A.Normalize(mean=[0.485, 0.456, 0.406], 
                        std=[0.229, 0.224, 0.225]),
             ToTensorV2()
-        ], keypoint_params=A.KeypointParams(format='xy', remove_invisible=False))
+        ], bbox_params=A.BboxParams(format='coco', label_fields=['class_labels']))
     
     return transforms

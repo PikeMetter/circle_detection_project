@@ -178,23 +178,76 @@ class YOLODataset(Dataset):
         # 应用数据增强
         if self.transform:
             try:
+                # 准备边界框数据，格式为 [x_min, y_min, x_max, y_max]
+                bboxes = []
+                class_labels = []
+                for (center_x, center_y, radius) in circles:
+                    # 转换为COCO格式的边界框 [x_min, y_min, width, height]
+                    x_min = max(0, center_x - radius)
+                    y_min = max(0, center_y - radius)
+                    width = min(w - x_min, 2 * radius)
+                    height = min(h - y_min, 2 * radius)
+                    bboxes.append([x_min, y_min, width, height])
+                    class_labels.append('circle')  # 添加类别标签
+                
                 # 准备要变换的数据
                 transformed = self.transform(
                     image=image,
-                    # 对于YOLO，我们需要传递边界框信息
-                    bboxes=[(center_x, center_y, box_w*w, box_h*h, 0) for (center_x, center_y, radius) in circles]
+                    bboxes=bboxes,
+                    class_labels=class_labels
                 )
                 image = transformed['image']
                 
+                # 如果数据增强改变了边界框，需要重新计算targets
+                if 'bboxes' in transformed:
+                    # 使用变换后的边界框重新计算targets
+                    transformed_bboxes = transformed['bboxes']
+                    # 重新初始化targets
+                    targets = np.zeros((self.S, self.S, 5 + self.C))
+                    
+                    # 处理每个变换后的边界框
+                    for i, bbox in enumerate(transformed_bboxes):
+                        x_min, y_min, width, height = bbox
+                        # 计算中心点
+                        center_x = x_min + width / 2
+                        center_y = y_min + height / 2
+                        # 计算半径
+                        radius = min(width, height) / 2
+                        
+                        # 标准化坐标到 [0, 1]
+                        x = center_x / w
+                        y = center_y / h
+                        box_w = width / w
+                        box_h = height / h
+                        
+                        # 计算目标所在的网格
+                        grid_x = int(x * self.S)
+                        grid_y = int(y * self.S)
+                        
+                        # 确保网格索引在有效范围内
+                        grid_x = max(0, min(self.S - 1, grid_x))
+                        grid_y = max(0, min(self.S - 1, grid_y))
+                        
+                        # 计算网格内的相对坐标
+                        x_grid = x * self.S - grid_x
+                        y_grid = y * self.S - grid_y
+                        
+                        # 设置目标标签
+                        targets[grid_y, grid_x, 0] = x_grid  # x坐标（网格内）
+                        targets[grid_y, grid_x, 1] = y_grid  # y坐标（网格内）
+                        targets[grid_y, grid_x, 2] = box_w   # 宽度
+                        targets[grid_y, grid_x, 3] = box_h   # 高度
+                        targets[grid_y, grid_x, 4] = 1.0     # 置信度
+                        
+                        # 设置类别标签（这里只有一个类别）
+                        if self.C > 0:
+                            targets[grid_y, grid_x, 5] = 1.0  # 类别概率
+                    
                 # 更新图像尺寸
                 if isinstance(image, np.ndarray):
                     h, w = image.shape[:2]
                 else:
                     h, w = image.shape[1], image.shape[2]
-                    
-                # 如果数据增强改变了边界框，需要重新计算targets
-                # 这里为了简化，假设数据增强不会改变边界框位置
-                # 在实际应用中，应该根据transform的输出重新计算targets
                     
             except Exception as e:
                 print(f"Transform error for {img_file}: {e}")

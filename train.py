@@ -45,20 +45,49 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, e
         with autocast(enabled=Config.USE_MIXED_PRECISION):
             if ModelFactory.is_yolo_model(model_type):
                 # YOLO模型训练逻辑
-                targets = batch['target'].to(device, non_blocking=True)
+                targets = batch['targets'].to(device, non_blocking=True)
                 outputs = model(images)
-                loss_components = criterion(outputs, targets)
-                
-                if len(loss_components) == 4:
-                    loss, coord_loss, conf_loss, cls_loss = loss_components
+                # 处理不同YOLO版本的输出格式
+                if model_type != 'yolo_v1' and isinstance(outputs, tuple):
+                    # 对于YOLOv3/v5/v8，输出是元组，需要适配损失函数
+                    # 这里需要根据具体模型调整处理方式
+                    # 暂时使用第一个输出作为示例
+                    if isinstance(outputs[0], list):
+                        # 如果是列表，取第一个元素
+                        outputs_for_loss = outputs[0][0] if len(outputs[0]) > 0 else outputs[0]
+                    else:
+                        outputs_for_loss = outputs[0]
                 else:
-                    # 兼容不同的返回格式
-                    loss = loss_components
+                    outputs_for_loss = outputs
+                loss_components = criterion(outputs_for_loss, targets)
+                
+                # YOLOv1Loss返回的是(total_loss, losses_dict)
+                if isinstance(loss_components, tuple) and len(loss_components) == 2:
+                    total_loss, losses_dict = loss_components
+                    loss = total_loss
+                    # 从字典中提取各部分损失
+                    coord_loss = losses_dict.get('coord_loss', torch.tensor(0.0, device=device))
+                    conf_loss_obj = losses_dict.get('conf_loss_obj', torch.tensor(0.0, device=device))
+                    conf_loss_noobj = losses_dict.get('conf_loss_noobj', torch.tensor(0.0, device=device))
+                    class_loss = losses_dict.get('class_loss', torch.tensor(0.0, device=device))
+                    # 合并置信度损失
+                    conf_loss = conf_loss_obj + conf_loss_noobj
+                    cls_loss = class_loss
+                else:
+                    # 如果不是期望的格式，创建默认值
+                    loss = loss_components if not isinstance(loss_components, tuple) else loss_components[0]
                     coord_loss = torch.tensor(0.0, device=device)
                     conf_loss = torch.tensor(0.0, device=device)
                     cls_loss = torch.tensor(0.0, device=device)
                 
-                loss = loss / accumulation_steps  # 梯度累积缩放
+                # 确保loss是标量值
+                if isinstance(loss, torch.Tensor) and loss.dim() == 0:
+                    loss = loss / accumulation_steps  # 梯度累积缩放
+                else:
+                    # 如果loss不是标量，计算其平均值
+                    if isinstance(loss, (list, tuple)):
+                        loss = sum(loss) / len(loss)
+                    loss = loss / accumulation_steps  # 梯度累积缩放
             else:
                 # UNet模型训练逻辑
                 heatmaps = batch['heatmap'].to(device, non_blocking=True)
@@ -173,15 +202,37 @@ def validate(model, val_loader, criterion, device, epoch, logger, model_type):
             with autocast(enabled=Config.USE_MIXED_PRECISION):
                 if ModelFactory.is_yolo_model(model_type):
                     # YOLO模型验证逻辑
-                    targets = batch['target'].to(device, non_blocking=True)
+                    targets = batch['targets'].to(device, non_blocking=True)
                     outputs = model(images)
-                    loss_components = criterion(outputs, targets)
-                    
-                    if len(loss_components) == 4:
-                        loss, coord_loss, conf_loss, cls_loss = loss_components
+                    # 处理不同YOLO版本的输出格式
+                    if model_type != 'yolo_v1' and isinstance(outputs, tuple):
+                        # 对于YOLOv3/v5/v8，输出是元组，需要适配损失函数
+                        # 这里需要根据具体模型调整处理方式
+                        # 暂时使用第一个输出作为示例
+                        if isinstance(outputs[0], list):
+                            # 如果是列表，取第一个元素
+                            outputs_for_loss = outputs[0][0] if len(outputs[0]) > 0 else outputs[0]
+                        else:
+                            outputs_for_loss = outputs[0]
                     else:
-                        # 兼容不同的返回格式
-                        loss = loss_components
+                        outputs_for_loss = outputs
+                    loss_components = criterion(outputs_for_loss, targets)
+                    
+                    # YOLOv1Loss返回的是(total_loss, losses_dict)
+                    if isinstance(loss_components, tuple) and len(loss_components) == 2:
+                        total_loss, losses_dict = loss_components
+                        loss = total_loss
+                        # 从字典中提取各部分损失
+                        coord_loss = losses_dict.get('coord_loss', torch.tensor(0.0, device=device))
+                        conf_loss_obj = losses_dict.get('conf_loss_obj', torch.tensor(0.0, device=device))
+                        conf_loss_noobj = losses_dict.get('conf_loss_noobj', torch.tensor(0.0, device=device))
+                        class_loss = losses_dict.get('class_loss', torch.tensor(0.0, device=device))
+                        # 合并置信度损失
+                        conf_loss = conf_loss_obj + conf_loss_noobj
+                        cls_loss = class_loss
+                    else:
+                        # 如果不是期望的格式，创建默认值
+                        loss = loss_components if not isinstance(loss_components, tuple) else loss_components[0]
                         coord_loss = torch.tensor(0.0, device=device)
                         conf_loss = torch.tensor(0.0, device=device)
                         cls_loss = torch.tensor(0.0, device=device)
@@ -353,13 +404,15 @@ def main():
     
     if ModelFactory.is_yolo_model(model_type):
         if model_type == 'yolo_v1':
-            optimizer = optim.SGD(model.parameters(), lr=model_config.learning_rate, momentum=0.9, weight_decay=5e-4)
+            optimizer = optim.SGD(model.parameters(), lr=Config.LEARNING_RATE, momentum=0.9, weight_decay=5e-4)
         else:
-            optimizer = optim.Adam(model.parameters(), lr=model_config.learning_rate)
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=model_config.lr_step_size, gamma=model_config.lr_gamma)
+            optimizer = optim.Adam(model.parameters(), lr=Config.LEARNING_RATE)
+        # 使用默认的学习率调度参数
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
     elif ModelFactory.is_unet_model(model_type):
-        optimizer = optim.Adam(model.parameters(), lr=model_config.learning_rate)
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=model_config.lr_step_size, gamma=model_config.lr_gamma)
+        optimizer = optim.Adam(model.parameters(), lr=Config.LEARNING_RATE)
+        # 使用默认的学习率调度参数
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
     

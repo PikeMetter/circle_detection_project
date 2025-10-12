@@ -25,7 +25,10 @@ class ModelFactory:
     _losses = {
         'combined': CombinedLoss,
         'focal': FocalLoss,
-        'yolo_v1': YOLOv1Loss
+        'yolo_v1': YOLOv1Loss,
+        'yolo_v3': YOLOv1Loss,  # YOLOv3可以使用类似的损失函数
+        'yolo_v5': YOLOv1Loss,  # YOLOv5可以使用类似的损失函数
+        'yolo_v8': YOLOv1Loss   # YOLOv8可以使用类似的损失函数
     }
     
     # 模型类型分组
@@ -51,6 +54,21 @@ class ModelFactory:
             raise ValueError(f"不支持的模型类型: {model_type}。支持的模型类型有: {supported_models}")
         
         model_class = cls._models[model_type]
+        
+        # 处理配置参数
+        if 'config' in kwargs:
+            config = kwargs.pop('config')
+            # 根据模型类型将配置参数映射到模型构造函数参数
+            if model_type == 'yolo_v1':
+                kwargs.setdefault('S', config.get('S', 7))
+                kwargs.setdefault('B', config.get('B', 2))
+                kwargs.setdefault('C', config.get('C', 1))
+            elif model_type in ['yolo_v3', 'yolo_v5', 'yolo_v8']:
+                kwargs.setdefault('num_classes', config.get('num_classes', 1))
+            elif model_type == 'unet_circle':
+                # UNet模型可能需要特殊处理
+                pass
+        
         return model_class(**kwargs)
     
     @classmethod
@@ -145,6 +163,17 @@ class ModelFactory:
             if model_type in models:
                 return group
         return None
+    
+    @classmethod
+    def get_config(cls, model_type):
+        """
+        获取指定模型类型的配置
+        Args:
+            model_type: 模型类型字符串
+        Returns:
+            dict: 模型配置字典
+        """
+        return ModelConfig.get_config(model_type)
 
 # 扩展配置类来支持不同的模型参数
 class ModelConfig:

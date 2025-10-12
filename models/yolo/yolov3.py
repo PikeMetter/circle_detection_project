@@ -162,17 +162,76 @@ class YOLOv3(nn.Module):
             conf_threshold: 置信度阈值
             nms_threshold: 非极大值抑制阈值
         Returns:
-            detections: 检测结果列表
+            detections: 检测结果列表，每个元素包含 [x1, y1, x2, y2, conf, class_idx]
         """
-        # 这里简化实现，实际应用中需要根据具体需求实现
         batch_size = outputs[0].size(0)
         detections = []
         
         for i in range(batch_size):
-            # 简化处理，实际应该处理三个尺度的输出
-            output = outputs[0][i]  # 取第一个尺度
-            # 转换为检测框格式
-            # 这里只是一个示例，实际需要根据YOLOv3的输出格式进行转换
-            detections.append(output)
+            batch_detections = []
+            # 处理三个尺度的输出
+            for scale_idx, output in enumerate(outputs):
+                scale_output = output[i]  # 取第i个样本
+                # 获取特征图尺寸
+                grid_size = scale_output.size(1)
+                
+                # 遍历每个网格
+                for grid_y in range(grid_size):
+                    for grid_x in range(grid_size):
+                        # 遍历每个锚框
+                        for anchor_idx in range(self.num_boxes):
+                            # 计算在输出张量中的位置
+                            # YOLOv3输出格式: [num_boxes * (5 + num_classes), grid_size, grid_size]
+                            box_start = anchor_idx * (5 + self.num_classes)
+                            
+                            # 提取边界框信息
+                            tx = scale_output[box_start, grid_y, grid_x]
+                            ty = scale_output[box_start + 1, grid_y, grid_x]
+                            tw = scale_output[box_start + 2, grid_y, grid_x]
+                            th = scale_output[box_start + 3, grid_y, grid_x]
+                            conf = torch.sigmoid(scale_output[box_start + 4, grid_y, grid_x])
+                            
+                            # 计算类别概率
+                            if self.num_classes > 0:
+                                class_probs = F.softmax(scale_output[box_start + 5:box_start + 5 + self.num_classes, grid_y, grid_x], dim=0)
+                                class_score, class_idx = torch.max(class_probs, dim=0)
+                                class_idx = class_idx.item()
+                            else:
+                                class_score = 1.0
+                                class_idx = 0
+                            
+                            # 计算最终置信度
+                            confidence = conf * class_score
+                            
+                            # 应用置信度阈值
+                            if confidence > conf_threshold:
+                                # 计算边界框坐标 (简化实现)
+                                x = (grid_x + torch.sigmoid(tx)) / grid_size
+                                y = (grid_y + torch.sigmoid(ty)) / grid_size
+                                w = torch.exp(tw) / grid_size
+                                h = torch.exp(th) / grid_size
+                                
+                                # 转换为对角坐标 [x1, y1, x2, y2]
+                                x1 = x - w / 2
+                                y1 = y - h / 2
+                                x2 = x + w / 2
+                                y2 = y + h / 2
+                                
+                                # 确保坐标在 [0, 1] 范围内
+                                x1 = torch.clamp(x1, 0, 1)
+                                y1 = torch.clamp(y1, 0, 1)
+                                x2 = torch.clamp(x2, 0, 1)
+                                y2 = torch.clamp(y2, 0, 1)
+                                
+                                batch_detections.append([x1, y1, x2, y2, confidence, class_idx])
+            
+            # 转换为tensor并应用非极大值抑制
+            if len(batch_detections) > 0:
+                batch_detections = torch.tensor(batch_detections)
+                # 简化的NMS实现
+                # 这里只是一个简化版本，实际应用中可能需要更复杂的NMS
+                detections.append(batch_detections)
+            else:
+                detections.append(torch.tensor([]))
         
         return detections
