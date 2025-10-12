@@ -64,8 +64,9 @@ class YOLODataset(Dataset):
                     circles = []
                     for shape in labelme_data.get('shapes', []):
                         if shape['label'] == 'circle':
-                            # 假设circle形状是用矩形近似的
+                            # 处理圆形标注
                             if shape['shape_type'] == 'rectangle':
+                                # 原有的矩形近似处理方式
                                 x1, y1 = shape['points'][0]
                                 x2, y2 = shape['points'][1]
                                 # 计算中心点和半径
@@ -76,6 +77,16 @@ class YOLODataset(Dataset):
                                 # 假设宽高近似相等，取平均作为直径
                                 radius = (width + height) / 4  # 除以4因为直径是宽或高
                                 circles.append((center_x, center_y, radius))
+                            elif shape['shape_type'] == 'circle':
+                                # 处理真正的圆形标注（中心点+圆周点）
+                                if len(shape['points']) >= 2:
+                                    # 第一个点是中心点
+                                    center_x, center_y = shape['points'][0]
+                                    # 第二个点是圆周上的点
+                                    perimeter_x, perimeter_y = shape['points'][1]
+                                    # 计算半径（两点间距离）
+                                    radius = np.sqrt((perimeter_x - center_x)**2 + (perimeter_y - center_y)**2)
+                                    circles.append((center_x, center_y, radius))
                         elif shape['label'] == 'center' and shape['shape_type'] == 'point':
                             # 如果只有中心点，需要估算半径（这种情况可能需要调整）
                             if len(shape['points']) > 0:
